@@ -581,6 +581,7 @@ class FluxPipeline(
         dtype,
         device,
         generator,
+        noise_level_custom,
         latents=None,
     ):
         # VAE applies 8x compression on images but we must also account for packing which requires
@@ -601,6 +602,7 @@ class FluxPipeline(
             )
 
         latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+        latents = noise_level_custom * latents
         latents = self._pack_latents(latents, batch_size, num_channels_latents, height, width)
 
         latent_image_ids = self._prepare_latent_image_ids(batch_size, height // 2, width // 2, device, dtype)
@@ -658,6 +660,7 @@ class FluxPipeline(
         callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 512,
+        noise_level_custom: float = 1.0,
     ):
         r"""
         Function invoked when calling the pipeline for generation.
@@ -838,6 +841,7 @@ class FluxPipeline(
             prompt_embeds.dtype,
             device,
             generator,
+            noise_level_custom,
             latents,
         )
 
@@ -897,6 +901,14 @@ class FluxPipeline(
                 batch_size * num_images_per_prompt,
             )
 
+        image_folder = "saved_images"
+        latents_folder = "saved_latents"
+
+        # Ensure directories exist
+        os.makedirs(image_folder, exist_ok=True)
+        os.makedirs(latents_folder, exist_ok=True)
+
+
         # 6. Denoising loop
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
@@ -937,9 +949,28 @@ class FluxPipeline(
                     )[0]
                     noise_pred = neg_noise_pred + true_cfg_scale * (noise_pred - neg_noise_pred)
 
+                latents_im = self._unpack_latents(latents, height, width, self.vae_scale_factor)
+                latents_im = (latents_im / self.vae.config.scaling_factor) + self.vae.config.shift_factor
+                image_im = self.vae.decode(latents_im, return_dict=False)[0]
+                image_im = self.image_processor.postprocess(image_im, output_type=output_type)
+                image_filename = os.path.join(image_folder, f"image_{noise_level_custom}_{t}.npy")
+                if isinstance(image_im, np.ndarray):
+                    image = Image.fromarray((image_im * 255).astype(np.uint8))  # Convert to uint8 if needed
+                image.save(image_filename)
+                print(f"Image saved for Timestep : {t}, and epsilon : {noise_level_custom}")
+
+
+
+
                 # compute the previous noisy sample x_t -> x_t-1
                 latents_dtype = latents.dtype
                 latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+                latents_filename = os.path.join(latents_folder, f"latents_{noise_level_custom}_{t}.npy")
+                np.save(latents_filename, latents)
+                print(f"Latent saved for Timestep : {t}, and epsilon : {noise_level_custom}")
+
+
+
 
                 if latents.dtype != latents_dtype:
                     if torch.backends.mps.is_available():
