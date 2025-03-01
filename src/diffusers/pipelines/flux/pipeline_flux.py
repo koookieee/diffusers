@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import inspect
+import os
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
@@ -953,10 +954,10 @@ class FluxPipeline(
                 latents_im = (latents_im / self.vae.config.scaling_factor) + self.vae.config.shift_factor
                 image_im = self.vae.decode(latents_im, return_dict=False)[0]
                 image_im = self.image_processor.postprocess(image_im, output_type=output_type)
-                image_filename = os.path.join(image_folder, f"image_{noise_level_custom}_{t}.npy")
+                image_filename = os.path.join(image_folder, f"image_{noise_level_custom}_{t}.png")
                 if isinstance(image_im, np.ndarray):
-                    image = Image.fromarray((image_im * 255).astype(np.uint8))  # Convert to uint8 if needed
-                image.save(image_filename)
+                    image_im[0] = Image.fromarray((image_im * 255).astype(np.uint8))  # Convert to uint8 if needed
+                image_im[0].save(image_filename)
                 print(f"Image saved for Timestep : {t}, and epsilon : {noise_level_custom}")
 
 
@@ -966,7 +967,9 @@ class FluxPipeline(
                 latents_dtype = latents.dtype
                 latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
                 latents_filename = os.path.join(latents_folder, f"latents_{noise_level_custom}_{t}.npy")
-                np.save(latents_filename, latents)
+                latents_save = latents
+                latents_save = latents_save.cpu().to(torch.float32)  # Convert to float32
+                np.save(latents_filename, latents_save.numpy())
                 print(f"Latent saved for Timestep : {t}, and epsilon : {noise_level_custom}")
 
 
