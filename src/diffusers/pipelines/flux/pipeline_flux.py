@@ -583,6 +583,7 @@ class FluxPipeline(
         device,
         generator,
         noise_level_custom,
+        add_directional_delta,
         latents=None,
     ):
         # VAE applies 8x compression on images but we must also account for packing which requires
@@ -603,7 +604,11 @@ class FluxPipeline(
             )
 
         latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
-        latents = noise_level_custom * latents
+        if add_directional_delta:
+            dlta = round(noise_level_custom - 1, 3)
+            latents = latents + dlta*latents
+        else:
+            latents = noise_level_custom * latents
         latents = self._pack_latents(latents, batch_size, num_channels_latents, height, width)
 
         latent_image_ids = self._prepare_latent_image_ids(batch_size, height // 2, width // 2, device, dtype)
@@ -662,6 +667,7 @@ class FluxPipeline(
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 512,
         noise_level_custom: float = 1.0,
+        add_directional_delta: Optional[bool] = False,
     ):
         r"""
         Function invoked when calling the pipeline for generation.
@@ -843,6 +849,7 @@ class FluxPipeline(
             device,
             generator,
             noise_level_custom,
+            add_directional_delta,
             latents,
         )
 
