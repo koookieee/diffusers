@@ -604,9 +604,11 @@ class FluxPipeline(
             )
 
         latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+        rand_vector = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+
         if add_directional_delta:
             dlta = round(noise_level_custom - 1, 3)
-            latents = latents + dlta*latents
+            latents = latents + dlta*rand_vector
         else:
             latents = noise_level_custom * latents
         latents = self._pack_latents(latents, batch_size, num_channels_latents, height, width)
